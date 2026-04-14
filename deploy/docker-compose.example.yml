@@ -1,0 +1,19 @@
+services:
+  cfst:
+    image: cn-hangzhou.cr.aliyuncs.com/your-namespace/cloudflare-speedtest:latest
+    container_name: cfst
+    restart: unless-stopped
+    environment:
+      CFST_INTERVAL_SECONDS: "60"
+      CFST_ARGS: "-f ip.txt -dn 10"
+      NGINX_HTTP_PORT: "8080"
+      NGINX_HTTPS_PORT: "8443"
+      NGINX_SERVER_NAME: "cfst.example.com"
+      NGINX_SSL_CERT_PATH: "/app/certs/fullchain.pem"
+      NGINX_SSL_KEY_PATH: "/app/certs/privkey.pem"
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    volumes:
+      - ./data:/app
+      - ./certs:/app/certs:ro
