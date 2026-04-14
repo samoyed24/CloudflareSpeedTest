@@ -65,25 +65,100 @@ jobs:
           ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}
           ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
           ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+          CFST_INTERVAL_SECONDS: ${{ secrets.CFST_INTERVAL_SECONDS }}
+          CFST_ARGS: ${{ secrets.CFST_ARGS }}
+          CFST_RESULT_ENVIRONMENT: ${{ secrets.CFST_RESULT_ENVIRONMENT }}
+          CFST_HISTORY_HOURS: ${{ secrets.CFST_HISTORY_HOURS }}
+          CFST_VMESS_TEMPLATE_B64: ${{ secrets.CFST_VMESS_TEMPLATE_B64 }}
+          NGINX_HTTP_PORT: ${{ secrets.NGINX_HTTP_PORT }}
+          NGINX_HTTPS_PORT: ${{ secrets.NGINX_HTTPS_PORT }}
+          NGINX_SERVER_NAME: ${{ secrets.NGINX_SERVER_NAME }}
+          NGINX_SSL_CERT_PATH: ${{ secrets.NGINX_SSL_CERT_PATH }}
+          NGINX_SSL_KEY_PATH: ${{ secrets.NGINX_SSL_KEY_PATH }}
+          NGINX_SSL_CERT_PEM: ${{ secrets.NGINX_SSL_CERT_PEM }}
+          NGINX_SSL_KEY_PEM: ${{ secrets.NGINX_SSL_KEY_PEM }}
         run: |
           set -eu
           SSH_USER="${TS_SSH_USER:-root}"
           TARGET_HOST="${TS_TARGET_HOST}"
           WORKDIR="${DEPLOY_WORKDIR:-/opt/cfst}"
           COMPOSE_FILE="${DEPLOY_COMPOSE_FILE:-docker-compose.yml}"
+          OVERRIDE_FILE=".cfst-runtime.override.yml"
+          OVERRIDE_LOCAL="/tmp/${OVERRIDE_FILE}"
 
           if [ -z "${TARGET_HOST}" ]; then
             echo "TS_TARGET_HOST is required" >&2
             exit 1
           fi
 
+          yaml_sq() {
+            printf '%s' "$1" | sed "s/'/''/g"
+          }
+
+          interval_value="${CFST_INTERVAL_SECONDS:-300}"
+          args_value="${CFST_ARGS:--f ip.txt}"
+          cert_pem_b64=""
+          key_pem_b64=""
+
+          if [ -n "${NGINX_SSL_CERT_PEM:-}" ]; then
+            cert_pem_b64="$(printf '%s' "${NGINX_SSL_CERT_PEM}" | base64 -w0)"
+          fi
+          if [ -n "${NGINX_SSL_KEY_PEM:-}" ]; then
+            key_pem_b64="$(printf '%s' "${NGINX_SSL_KEY_PEM}" | base64 -w0)"
+          fi
+
+          interval_escaped="$(yaml_sq "${interval_value}")"
+          args_escaped="$(yaml_sq "${args_value}")"
+
+          {
+            echo "services:"
+            echo "  cfst:"
+            echo "    environment:"
+            echo "      CFST_INTERVAL_SECONDS: '${interval_escaped}'"
+            echo "      CFST_ARGS: '${args_escaped}'"
+            if [ -n "${CFST_RESULT_ENVIRONMENT:-}" ]; then
+              echo "      CFST_RESULT_ENVIRONMENT: '$(yaml_sq "${CFST_RESULT_ENVIRONMENT}")'"
+            fi
+            if [ -n "${CFST_HISTORY_HOURS:-}" ]; then
+              echo "      CFST_HISTORY_HOURS: '$(yaml_sq "${CFST_HISTORY_HOURS}")'"
+            fi
+            if [ -n "${CFST_VMESS_TEMPLATE_B64:-}" ]; then
+              echo "      CFST_VMESS_TEMPLATE_B64: '$(yaml_sq "${CFST_VMESS_TEMPLATE_B64}")'"
+            fi
+            if [ -n "${NGINX_HTTP_PORT:-}" ]; then
+              echo "      NGINX_HTTP_PORT: '$(yaml_sq "${NGINX_HTTP_PORT}")'"
+            fi
+            if [ -n "${NGINX_HTTPS_PORT:-}" ]; then
+              echo "      NGINX_HTTPS_PORT: '$(yaml_sq "${NGINX_HTTPS_PORT}")'"
+            fi
+            if [ -n "${NGINX_SERVER_NAME:-}" ]; then
+              echo "      NGINX_SERVER_NAME: '$(yaml_sq "${NGINX_SERVER_NAME}")'"
+            fi
+            if [ -n "${NGINX_SSL_CERT_PATH:-}" ]; then
+              echo "      NGINX_SSL_CERT_PATH: '$(yaml_sq "${NGINX_SSL_CERT_PATH}")'"
+            fi
+            if [ -n "${NGINX_SSL_KEY_PATH:-}" ]; then
+              echo "      NGINX_SSL_KEY_PATH: '$(yaml_sq "${NGINX_SSL_KEY_PATH}")'"
+            fi
+            if [ -n "${cert_pem_b64}" ]; then
+              echo "      NGINX_SSL_CERT_PEM_B64: '$(yaml_sq "${cert_pem_b64}")'"
+            fi
+            if [ -n "${key_pem_b64}" ]; then
+              echo "      NGINX_SSL_KEY_PEM_B64: '$(yaml_sq "${key_pem_b64}")'"
+            fi
+          } > "${OVERRIDE_LOCAL}"
+
+          OVERRIDE_B64="$(base64 -w0 "${OVERRIDE_LOCAL}")"
+
           tailscale ping "${TARGET_HOST}" --timeout=15s
 
           tailscale ssh "${SSH_USER}@${TARGET_HOST}" "\
             set -eu; \
+            mkdir -p '${WORKDIR}'; \
             cd '${WORKDIR}'; \
+            echo '${OVERRIDE_B64}' | base64 -d > '${OVERRIDE_FILE}'; \
             docker login '${ACR_REGISTRY}' -u '${ACR_USERNAME}' -p '${ACR_PASSWORD}'; \
-            docker compose -f '${COMPOSE_FILE}' pull; \
-            docker compose -f '${COMPOSE_FILE}' up -d; \
+            docker compose -f '${COMPOSE_FILE}' -f '${OVERRIDE_FILE}' pull; \
+            docker compose -f '${COMPOSE_FILE}' -f '${OVERRIDE_FILE}' up -d; \
             docker image prune -f \
           "
