@@ -151,7 +151,7 @@ jobs:
 
           OVERRIDE_B64="$(base64 -w0 "${OVERRIDE_LOCAL}")"
 
-          tailscale ping --timeout=15s "${TARGET_HOST_TRIMMED}"
+          echo "[deploy] checking Tailscale SSH reachability to ${TARGET_HOST_TRIMMED}"
 
           tailscale ssh "${SSH_USER}@${TARGET_HOST_TRIMMED}" "\
             set -eu; \
