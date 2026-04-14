@@ -18,7 +18,7 @@ RUN apk add --no-cache nginx gettext
 WORKDIR /app
 
 COPY --from=builder /out/cfst /usr/local/bin/cfst
-COPY ip.txt ipv6.txt result.yaml ./
+COPY ip.txt ipv6.txt ./
 COPY docker/entrypoint.sh /docker/entrypoint.sh
 COPY docker/run-cfst-loop.sh /docker/run-cfst-loop.sh
 COPY docker/nginx/default.conf.template /etc/nginx/templates/default.conf.template
