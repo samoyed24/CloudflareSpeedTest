@@ -85,8 +85,9 @@ jobs:
           COMPOSE_FILE="${DEPLOY_COMPOSE_FILE:-docker-compose.yml}"
           OVERRIDE_FILE=".cfst-runtime.override.yml"
           OVERRIDE_LOCAL="/tmp/${OVERRIDE_FILE}"
+          TARGET_HOST_TRIMMED="$(printf '%s' "${TARGET_HOST}" | tr -d '[:space:]')"
 
-          if [ -z "${TARGET_HOST}" ]; then
+          if [ -z "${TARGET_HOST_TRIMMED}" ]; then
             echo "TS_TARGET_HOST is required" >&2
             exit 1
           fi
@@ -150,9 +151,9 @@ jobs:
 
           OVERRIDE_B64="$(base64 -w0 "${OVERRIDE_LOCAL}")"
 
-          tailscale ping "${TARGET_HOST}" --timeout=15s
+          tailscale ping --timeout=15s "${TARGET_HOST_TRIMMED}"
 
-          tailscale ssh "${SSH_USER}@${TARGET_HOST}" "\
+          tailscale ssh "${SSH_USER}@${TARGET_HOST_TRIMMED}" "\
             set -eu; \
             mkdir -p '${WORKDIR}'; \
             cd '${WORKDIR}'; \
