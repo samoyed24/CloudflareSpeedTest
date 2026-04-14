@@ -1,0 +1,11 @@
+server {
+    listen ${NGINX_HTTP_PORT};
+    server_name ${NGINX_SERVER_NAME};
+
+    root /app;
+    index result.html;
+
+    location / {
+        try_files $uri $uri/ /result.html;
+    }
+}

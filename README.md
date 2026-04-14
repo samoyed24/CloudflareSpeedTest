@@ -133,6 +133,8 @@ IP 地址           已发送  已接收  丢包率  平均延迟  下载速度(
 
 完整结果保存在当前目录下的 `result.csv` 文件中，用**记事本/表格软件**打开，格式如下：
 
+另外还会生成 `result.html`，页面里会展示测速时间、测速环境、前 10 个 IP 的表格，并在每行提供 VMess 复制图标；如果要启用这些按钮，请在同目录下配置 `result.yaml`，填写 `environment`、`history_hours` 和 `vmess_template`。
+
 ```
 IP 地址,已发送,已接收,丢包率,平均延迟,下载速度(MB/s),地区码
 104.27.200.69,4,4,0.00,146.23,28.64,LAX
@@ -818,6 +820,130 @@ cfst -f 1.txt
 考虑到很多人获得最快 Cloudflare CDN IP 后，需要替换 Hosts 文件中的 IP。
 
 可以看这个 [**Issues**](https://github.com/XIU2/CloudflareSpeedTest/discussions/312) 获取 **Windows/Linux 自动更新 Hosts 脚本**！
+
+****
+
+## Docker 与镜像自动构建
+
+项目已提供：
+
+- 多阶段构建 `Dockerfile`（支持多架构构建）
+- `.dockerignore`
+- GitHub Actions 工作流：`.github/workflows/docker-acr.yml`
+
+### 本地构建镜像
+
+```bash
+docker build -t cfst:local .
+```
+
+容器内会同时运行：
+
+- `cfst` 循环测速任务（按秒级间隔执行）
+- `nginx` 静态服务（对外提供 `result.html`）
+
+常用环境变量：
+
+- `CFST_INTERVAL_SECONDS`: 自动测速间隔（秒），默认 `300`
+- `CFST_ARGS`: `cfst` 启动参数，默认 `-f ip.txt`
+- `NGINX_HTTP_PORT`: HTTP 端口，默认 `8080`
+- `NGINX_HTTPS_PORT`: HTTPS 端口，默认 `8443`
+- `NGINX_SERVER_NAME`: 域名（nginx `server_name`），默认 `_`
+- `NGINX_SSL_CERT_PATH`: 证书路径，默认 `/app/certs/fullchain.pem`
+- `NGINX_SSL_KEY_PATH`: 私钥路径，默认 `/app/certs/privkey.pem`
+
+运行示例（HTTP，仅配置测速间隔和参数）：
+
+```bash
+docker run --rm -it \
+    -p 8080:8080 \
+    -e CFST_INTERVAL_SECONDS=60 \
+    -e CFST_ARGS="-f ip.txt -dn 10" \
+    -e NGINX_HTTP_PORT=8080 \
+    -v "$PWD:/app" \
+    cfst:local
+```
+
+运行示例（HTTPS，配置端口/域名/证书）：
+
+```bash
+docker run --rm -it \
+    -p 8080:8080 \
+    -p 8443:8443 \
+    -e CFST_INTERVAL_SECONDS=120 \
+    -e NGINX_SERVER_NAME=cfst.example.com \
+    -e NGINX_HTTP_PORT=8080 \
+    -e NGINX_HTTPS_PORT=8443 \
+    -e NGINX_SSL_CERT_PATH=/app/certs/fullchain.pem \
+    -e NGINX_SSL_KEY_PATH=/app/certs/privkey.pem \
+    -v "$PWD:/app" \
+    -v /path/to/certs:/app/certs:ro \
+    cfst:local
+```
+
+> 如果未挂载证书文件，容器会自动降级为 HTTP-only 模式。
+
+### GitHub Actions 自动构建并推送到阿里云 ACR
+
+工作流触发条件：
+
+- push 到 `main` / `master`
+- push tag（`v*`）
+- 手动触发 `workflow_dispatch`
+
+工作流会自动构建并推送：
+
+- `linux/amd64`
+- `linux/arm64`
+
+请在 GitHub 仓库中配置以下 `Secrets`：
+
+- `ACR_REGISTRY`: 镜像仓库地址（例如 `cn-hangzhou.cr.aliyuncs.com`）
+- `ACR_NAMESPACE`: 命名空间（例如 `your-namespace`）
+- `IMAGE_NAME`: 镜像名（例如 `cloudflare-speedtest`）
+- `ACR_USERNAME`: 阿里云 ACR 用户名
+- `ACR_PASSWORD`: 阿里云 ACR 密码或访问凭证
+
+最终推送镜像名格式：
+
+```text
+${ACR_REGISTRY}/${ACR_NAMESPACE}/${IMAGE_NAME}
+```
+
+### 通过 Tailscale 自动部署到无公网 IP 服务器
+
+如果服务器没有公网 IP，可以让 GitHub Actions 通过 Tailscale SSH 进入内网服务器执行部署。
+
+已提供工作流：
+
+- `.github/workflows/docker-acr-tailscale-deploy.yml`
+
+该工作流会：
+
+1. 构建并推送多架构镜像到 ACR
+2. 连接 Tailscale 网络
+3. SSH 到你的内网服务器执行 `docker compose pull && docker compose up -d`
+
+还提供了部署参考文件：
+
+- `deploy/docker-compose.example.yml`
+
+请在 GitHub 仓库增加以下 `Secrets`：
+
+- `TS_OAUTH_CLIENT_ID`
+- `TS_OAUTH_SECRET`
+- `TS_TARGET_HOST`：Tailscale 主机名或 100.x 地址
+- `TS_SSH_USER`：SSH 用户（可选，默认 `root`）
+- `DEPLOY_WORKDIR`：服务器部署目录（可选，默认 `/opt/cfst`）
+- `DEPLOY_COMPOSE_FILE`：compose 文件名（可选，默认 `docker-compose.yml`）
+
+- `ACR_USERNAME`
+- `ACR_PASSWORD`
+- `ACR_REGISTRY`
+- `ACR_NAMESPACE`
+- `IMAGE_NAME`
+
+> 提示：你需要先在内网服务器上安装 Docker/Compose，并把 compose 文件放到 `DEPLOY_WORKDIR`。
 
 ****
 

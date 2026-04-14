@@ -1,0 +1,89 @@
+name: Build Push and Deploy via Tailscale
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Alibaba Cloud ACR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ACR_REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/${{ secrets.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest
+
+      - name: Build and push (linux/amd64, linux/arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Deploy on private server over Tailscale SSH
+        env:
+          TS_SSH_USER: ${{ secrets.TS_SSH_USER }}
+          TS_TARGET_HOST: ${{ secrets.TS_TARGET_HOST }}
+          DEPLOY_WORKDIR: ${{ secrets.DEPLOY_WORKDIR }}
+          DEPLOY_COMPOSE_FILE: ${{ secrets.DEPLOY_COMPOSE_FILE }}
+          ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}
+          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+        run: |
+          set -eu
+          SSH_USER="${TS_SSH_USER:-root}"
+          TARGET_HOST="${TS_TARGET_HOST}"
+          WORKDIR="${DEPLOY_WORKDIR:-/opt/cfst}"
+          COMPOSE_FILE="${DEPLOY_COMPOSE_FILE:-docker-compose.yml}"
+
+          if [ -z "${TARGET_HOST}" ]; then
+            echo "TS_TARGET_HOST is required" >&2
+            exit 1
+          fi
+
+          tailscale ping "${TARGET_HOST}" --timeout=15s
+
+          tailscale ssh "${SSH_USER}@${TARGET_HOST}" "\
+            set -eu; \
+            cd '${WORKDIR}'; \
+            docker login '${ACR_REGISTRY}' -u '${ACR_USERNAME}' -p '${ACR_PASSWORD}'; \
+            docker compose -f '${COMPOSE_FILE}' pull; \
+            docker compose -f '${COMPOSE_FILE}' up -d; \
+            docker image prune -f \
+          "

@@ -1,0 +1,10 @@
+.git
+.github
+.vscode
+.idea
+.DS_Store
+result.html
+result_history.json
+*.log
+*.tmp
+*.swp

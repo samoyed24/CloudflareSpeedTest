@@ -1,0 +1,29 @@
+server {
+    listen ${NGINX_HTTP_PORT};
+    server_name ${NGINX_SERVER_NAME};
+
+    root /app;
+    index result.html;
+
+    location / {
+        try_files $uri $uri/ /result.html;
+    }
+}
+
+server {
+    listen ${NGINX_HTTPS_PORT} ssl;
+    server_name ${NGINX_SERVER_NAME};
+
+    ssl_certificate ${NGINX_SSL_CERT_PATH};
+    ssl_certificate_key ${NGINX_SSL_KEY_PATH};
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:10m;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    root /app;
+    index result.html;
+
+    location / {
+        try_files $uri $uri/ /result.html;
+    }
+}

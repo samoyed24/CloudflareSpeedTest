@@ -60,8 +60,11 @@ https://github.com/XIU2/CloudflareSpeedTest
         IP段数据文件；如路径含有空格请加上引号；支持其他 CDN IP段；(默认 ip.txt)
     -ip 1.1.1.1,2.2.2.2/24,2606:4700::/32
         指定IP段数据；直接通过参数指定要测速的 IP 段数据，英文逗号分隔；(默认 空)
-    -o result.csv
-        写入结果文件；如路径含有空格请加上引号；值为空时不写入文件 [-o ""]；(默认 result.csv)
+	-o result.csv
+		旧的 CSV 输出参数已不再生成文件；保留仅用于兼容历史参数。
+	result.yaml
+		HTML 输出配置文件；可配置测速环境与 VMess 模板；(默认 result.yaml)
+		测速结束后会额外写入 HTML 表格结果文件 result.html（前 10 个 IP）。
 
     -dd
         禁用下载测速；禁用后测速结果会按延迟排序 (默认按下载速度排序)；(默认 启用)
@@ -139,9 +142,9 @@ func main() {
 	pingData := task.NewPing().Run().FilterDelay().FilterLossRate()
 	// 开始下载测速
 	speedData := task.TestDownloadSpeed(pingData)
-	utils.ExportCsv(speedData) // 输出文件
-	speedData.Print()          // 打印结果
-	endPrint()                 // 根据情况选择退出方式（针对 Windows）
+	utils.ExportTopHTML(speedData)
+	speedData.Print() // 打印结果
+	endPrint()        // 根据情况选择退出方式（针对 Windows）
 }
 
 // 根据情况选择退出方式（针对 Windows）
