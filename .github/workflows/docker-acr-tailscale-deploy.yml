@@ -156,7 +156,6 @@ jobs:
             echo "      - '8080:8080'"
             echo "      - '8443:8443'"
             echo "    volumes:"
-            echo "      - ./data:/app"
             echo "      - ./certs:/app/certs:ro"
           } > "${COMPOSE_LOCAL}"
 
