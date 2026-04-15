@@ -1414,6 +1414,9 @@ func ExportTopHTML(data []CloudflareIPData) {
 			}
 			qrLoading.classList.add('is-visible');
 			qrImage.style.display = 'none';
+			// 每次加载前先清理旧事件，避免旧回调干扰。
+			qrImage.onload = null;
+			qrImage.onerror = null;
 			qrImage.onload = function() {
 				qrLoading.classList.remove('is-visible');
 				qrImage.style.display = 'block';
@@ -1432,6 +1435,9 @@ func ExportTopHTML(data []CloudflareIPData) {
 			qrModal.classList.remove('is-open');
 			qrModal.setAttribute('aria-hidden', 'true');
 			qrLoading.classList.remove('is-visible');
+			// 先解除事件，再清空 src，避免触发误报的 onerror。
+			qrImage.onload = null;
+			qrImage.onerror = null;
 			qrImage.src = '';
 			qrImage.style.display = 'block';
 			qrText.textContent = '';
