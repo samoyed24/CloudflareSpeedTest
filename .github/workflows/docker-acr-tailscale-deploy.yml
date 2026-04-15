@@ -63,6 +63,8 @@ jobs:
           DEPLOY_WORKDIR: ${{ secrets.DEPLOY_WORKDIR }}
           DEPLOY_COMPOSE_FILE: ${{ secrets.DEPLOY_COMPOSE_FILE }}
           ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}
+          ACR_NAMESPACE: ${{ secrets.ACR_NAMESPACE }}
+          IMAGE_NAME: ${{ secrets.IMAGE_NAME }}
           ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
           ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
           CFST_INTERVAL_SECONDS: ${{ secrets.CFST_INTERVAL_SECONDS }}
@@ -83,8 +85,7 @@ jobs:
           TARGET_HOST="${TS_TARGET_HOST}"
           WORKDIR="${DEPLOY_WORKDIR:-/opt/cfst}"
           COMPOSE_FILE="${DEPLOY_COMPOSE_FILE:-docker-compose.yml}"
-          OVERRIDE_FILE=".cfst-runtime.override.yml"
-          OVERRIDE_LOCAL="/tmp/${OVERRIDE_FILE}"
+          COMPOSE_LOCAL="/tmp/${COMPOSE_FILE}"
           TARGET_HOST_TRIMMED="$(printf '%s' "${TARGET_HOST}" | tr -d '[:space:]')"
 
           if [ -z "${TARGET_HOST_TRIMMED}" ]; then
@@ -98,6 +99,7 @@ jobs:
 
           interval_value="${CFST_INTERVAL_SECONDS:-300}"
           args_value="${CFST_ARGS:--f ip.txt}"
+          compose_image="${ACR_REGISTRY}/${ACR_NAMESPACE}/${IMAGE_NAME}:latest"
           cert_pem_b64=""
           key_pem_b64=""
 
@@ -114,6 +116,9 @@ jobs:
           {
             echo "services:"
             echo "  cfst:"
+            echo "    image: '${compose_image}'"
+            echo "    container_name: cfst"
+            echo "    restart: unless-stopped"
             echo "    environment:"
             echo "      CFST_INTERVAL_SECONDS: '${interval_escaped}'"
             echo "      CFST_ARGS: '${args_escaped}'"
@@ -147,9 +152,15 @@ jobs:
             if [ -n "${key_pem_b64}" ]; then
               echo "      NGINX_SSL_KEY_PEM_B64: '$(yaml_sq "${key_pem_b64}")'"
             fi
-          } > "${OVERRIDE_LOCAL}"
+            echo "    ports:"
+            echo "      - '8080:8080'"
+            echo "      - '8443:8443'"
+            echo "    volumes:"
+            echo "      - ./data:/app"
+            echo "      - ./certs:/app/certs:ro"
+          } > "${COMPOSE_LOCAL}"
 
-          OVERRIDE_B64="$(base64 -w0 "${OVERRIDE_LOCAL}")"
+          COMPOSE_B64="$(base64 -w0 "${COMPOSE_LOCAL}")"
 
           echo "[deploy] checking Tailscale SSH reachability to ${TARGET_HOST_TRIMMED}"
 
@@ -163,9 +174,9 @@ jobs:
             set -eu; \
             mkdir -p '${WORKDIR}'; \
             cd '${WORKDIR}'; \
-            echo '${OVERRIDE_B64}' | base64 -d > '${OVERRIDE_FILE}'; \
-            docker login '${ACR_REGISTRY}' -u '${ACR_USERNAME}' -p '${ACR_PASSWORD}'; \
-            docker compose -f '${COMPOSE_FILE}' -f '${OVERRIDE_FILE}' pull; \
-            docker compose -f '${COMPOSE_FILE}' -f '${OVERRIDE_FILE}' up -d; \
+            echo '${COMPOSE_B64}' | base64 -d > '${COMPOSE_FILE}'; \
+            printf '%s' '${ACR_PASSWORD}' | docker login '${ACR_REGISTRY}' -u '${ACR_USERNAME}' --password-stdin; \
+            docker compose -f '${COMPOSE_FILE}' pull; \
+            docker compose -f '${COMPOSE_FILE}' up -d; \
             docker image prune -f \
           "
