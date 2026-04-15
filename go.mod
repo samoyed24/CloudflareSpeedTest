@@ -6,6 +6,7 @@ require (
 	github.com/VividCortex/ewma v1.2.0
 	github.com/cheggaaa/pb/v3 v3.1.7
 	github.com/fatih/color v1.18.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
