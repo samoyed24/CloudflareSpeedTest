@@ -1357,6 +1357,7 @@ func ExportTopHTML(data []CloudflareIPData) {
     <script>
 		var qrModal = document.getElementById('qr-modal');
 		var qrImage = document.getElementById('qr-image');
+		var qrLoading = document.getElementById('qr-loading');
 		var qrText = document.getElementById('qr-text');
 
         function copyText(text) {
