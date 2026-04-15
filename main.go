@@ -19,16 +19,17 @@ var (
 )
 
 type Config struct {
-	Environment  string `yaml:"environment"`
-	HistoryHours int    `yaml:"history_hours"`
+	Environment   string `yaml:"environment"`
+	HistoryHours  int    `yaml:"history_hours"`
 	VMessTemplate string `yaml:"vmess_template"`
+	NginxDir      string `yaml:"nginx_dir"`
 }
 
 func loadConfig(configFile string) *Config {
 	data, err := os.ReadFile(configFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "错误: 无法读取配置文件 %s: %v\n", configFile, err)
-		fmt.Fprintf(os.Stderr, "请先创建配置文件: cp config.template.yml %s\n", configFile)
+		fmt.Fprintf(os.Stderr, "请先创建配置文件: cp config.template.yaml %s\n", configFile)
 		os.Exit(1)
 	}
 
@@ -36,6 +37,7 @@ func loadConfig(configFile string) *Config {
 		Environment:   "",
 		HistoryHours:  72,
 		VMessTemplate: "",
+		NginxDir:      "",
 	}
 
 	if err := yaml.Unmarshal(data, cfg); err != nil {
@@ -140,8 +142,30 @@ https://github.com/XIU2/CloudflareSpeedTest
 	flag.Usage = func() { fmt.Print(help) }
 	flag.Parse()
 
-	// 加载实例配置文件
-	_ = loadConfig("instance/config.yml")
+	// 加载配置文件
+	cfg := loadConfig("instance/config.yaml")
+	
+	// 确保输出目录存在（硬编码为 data 和 dist）
+	const dataDir = "data"
+	const distDir = "dist"
+	os.MkdirAll(dataDir, 0755)
+	os.MkdirAll(distDir, 0755)
+	
+	// 设置输出路径给utils包
+	utils.HTMLOutputPath = distDir + "/result.html"
+	utils.HistoryOutputPath = dataDir + "/result_history.json"
+	utils.GlobalHTMLConfig = utils.HTMLConfig{
+		Environment:   cfg.Environment,
+		HistoryHours:  cfg.HistoryHours,
+		VMessTemplate: cfg.VMessTemplate,
+	}
+	// 应用数据目录路径（如果命令行没有明确指定，使用 data 目录）
+	if flag.Lookup("f").Value.String() == "ip.txt" {
+		task.IPFile = dataDir + "/ip.txt"
+	}
+	if flag.Lookup("o").Value.String() == "result.csv" {
+		utils.Output = dataDir + "/result_history.json"
+	}
 
 	if task.MinSpeed > 0 && time.Duration(maxDelay)*time.Millisecond == utils.InputMaxDelay {
 		utils.Yellow.Println("[提示] 在使用 [-sl] 参数时，建议搭配 [-tl] 参数，以避免因凑不够 [-dn] 数量而一直测速...")

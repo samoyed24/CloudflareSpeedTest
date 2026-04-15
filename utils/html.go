@@ -16,17 +16,31 @@ import (
 )
 
 const (
-	defaultHTMLOutput   = "result.html"
-	defaultHTMLConfig   = "result.yaml"
-	defaultHistoryStore = "result_history.json"
-	defaultHistoryHours = 72
-	defaultTopLimit     = 10
+	DefaultHTMLFileName     = "result.html"
+	DefaultHTMLConfig       = "result.yaml"
+	DefaultHistoryFileName  = "result_history.json"
+	defaultHistoryHours     = 72
+	defaultTopLimit         = 10
+)
+
+// 可配置的输出路径（在main.go中设置）
+var (
+	HTMLOutputPath    = DefaultHTMLFileName
+	HistoryOutputPath = DefaultHistoryFileName
+	GlobalHTMLConfig  HTMLConfig // 由main.go设置
 )
 
 type htmlConfig struct {
 	Environment   string `yaml:"environment"`
 	HistoryHours  int    `yaml:"history_hours"`
 	VMessTemplate string `yaml:"vmess_template"`
+}
+
+// HTMLConfig 是对外导出的配置类型
+type HTMLConfig struct {
+	Environment   string
+	HistoryHours  int
+	VMessTemplate string
 }
 
 type htmlPageData struct {
@@ -103,7 +117,8 @@ type sectionData struct {
 }
 
 func loadHTMLConfig() (htmlConfig, error) {
-	content, err := os.ReadFile(defaultHTMLConfig)
+	// 尝试读取instance/config.yaml作为后备，但优先使用GlobalHTMLConfig
+	content, err := os.ReadFile("instance/config.yaml")
 	if err != nil {
 		if os.IsNotExist(err) {
 			return htmlConfig{}, nil
@@ -339,7 +354,7 @@ func recordToRow(record historyRecord, rank int, vmessLink string, hasVMessLink 
 }
 
 func loadHistoryStore() ([]historyRecord, error) {
-	content, err := os.ReadFile(defaultHistoryStore)
+	content, err := os.ReadFile(HistoryOutputPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -363,7 +378,7 @@ func saveHistoryStore(records []historyRecord) error {
 		return err
 	}
 	content = append(content, '\n')
-	return os.WriteFile(defaultHistoryStore, content, 0644)
+	return os.WriteFile(HistoryOutputPath, content, 0644)
 }
 
 func mergeHistoryStore(currentRecords []historyRecord, historyWindow time.Duration, testedAt time.Time) ([]historyRecord, error) {
@@ -516,9 +531,11 @@ func renderSectionHTML(data sectionData) htmpl.HTML {
 
 // ExportTopHTML 会在测速结束后导出前 10 个结果为 HTML 表格。
 func ExportTopHTML(data []CloudflareIPData) {
-	cfg, err := loadHTMLConfig()
-	if err != nil {
-		log.Printf("[警告] 读取 result.yaml 失败：%v", err)
+	// 使用从main.go加载的全局配置
+	cfg := htmlConfig{
+		Environment:   GlobalHTMLConfig.Environment,
+		HistoryHours:  GlobalHTMLConfig.HistoryHours,
+		VMessTemplate: GlobalHTMLConfig.VMessTemplate,
 	}
 	vmessTpl := compileVMessTemplate(cfg.VMessTemplate)
 
@@ -985,7 +1002,7 @@ func ExportTopHTML(data []CloudflareIPData) {
 		Title:    "最近历史结果",
 		Subtitle: fmt.Sprintf("从本地历史数据中取出最近 %d 小时的记录，按速度从快到慢排序前 10 个。", historyHours),
 		MetaItems: []metaItem{
-			{Label: "数据来源", Value: defaultHistoryStore},
+			{Label: "数据来源", Value: HistoryOutputPath},
 			{Label: "时间窗口", Value: fmt.Sprintf("最近 %d 小时", historyHours)},
 			{Label: "展示数量", Value: fmt.Sprintf("%d 个 IP", len(historyRecords))},
 		},
@@ -1417,20 +1434,20 @@ func ExportTopHTML(data []CloudflareIPData) {
 	}{
 		CurrentSection: currentSection,
 		HistorySection: historySection,
-		HistoryFile:    defaultHistoryStore,
+		HistoryFile:    HistoryOutputPath,
 	}
 
-	fp, err := os.Create(defaultHTMLOutput)
+	fp, err := os.Create(HTMLOutputPath)
 	if err != nil {
-		log.Fatalf("创建文件[%s]失败：%v", defaultHTMLOutput, err)
+		log.Fatalf("创建文件[%s]失败：%v", HTMLOutputPath, err)
 		return
 	}
 	defer fp.Close()
 
 	if err := pageTemplate.Execute(fp, page); err != nil {
-		log.Fatalf("写入文件[%s]失败：%v", defaultHTMLOutput, err)
+		log.Fatalf("写入文件[%s]失败：%v", HTMLOutputPath, err)
 		return
 	}
 
-	fmt.Printf("HTML 测速结果已写入 %v 文件，可用浏览器打开查看。\n", defaultHTMLOutput)
+	fmt.Printf("HTML 测速结果已写入 %v 文件，可用浏览器打开查看。\n", HTMLOutputPath)
 }
