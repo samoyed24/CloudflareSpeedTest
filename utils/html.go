@@ -502,10 +502,7 @@ func renderRowsHTML(records []historyRecord, template *ttmpl.Template) htmpl.HTM
 
 func renderSectionHTML(data sectionData) htmpl.HTML {
 	var builder strings.Builder
-	className := "view"
-	if data.Active {
-		className += " is-active"
-	}
+	className := "result-section"
 
 	builder.WriteString(fmt.Sprintf("<section class=\"%s\" id=\"view-%s\">", className, htmpl.HTMLEscapeString(data.ID)))
 	builder.WriteString("<div class=\"hero compact\">")
@@ -869,6 +866,7 @@ func ExportTopHTML(data []CloudflareIPData) {
 	<script>
 		var qrModal = document.getElementById('qr-modal');
 		var qrImage = document.getElementById('qr-image');
+		var qrLoading = document.getElementById('qr-loading');
 		var qrText = document.getElementById('qr-text');
 
 		function copyText(text) {
@@ -1086,19 +1084,19 @@ func ExportTopHTML(data []CloudflareIPData) {
             font-weight: 700;
             cursor: pointer;
         }
-        .tab-btn.active {
-            background: var(--accent);
-            color: #fff;
-            border-color: var(--accent);
-            box-shadow: 0 8px 18px rgba(11, 110, 249, 0.18);
-        }
-        .view {
-            display: none;
-            padding-bottom: 12px;
-        }
-        .view.is-active {
-            display: block;
-        }
+		.tab-btn.active {
+			background: var(--accent);
+			color: #fff;
+			border-color: var(--accent);
+			box-shadow: 0 8px 18px rgba(11, 110, 249, 0.18);
+		}
+		.result-section {
+			padding-bottom: 12px;
+		}
+		.result-section + .result-section {
+			margin-top: 6px;
+			border-top: 1px dashed var(--line);
+		}
         .meta {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1249,6 +1247,36 @@ func ExportTopHTML(data []CloudflareIPData) {
 					border: 1px solid #e5e7eb;
 					background: #fff;
 				}
+				.qr-loading {
+					display: none;
+					width: 240px;
+					height: 240px;
+					margin: 0 auto;
+					border-radius: 14px;
+					border: 1px solid #e5e7eb;
+					background: linear-gradient(135deg, #f8fafc, #eef4ff);
+					position: relative;
+				}
+				.qr-loading.is-visible {
+					display: block;
+				}
+				.qr-loading::after {
+					content: "";
+					position: absolute;
+					top: 50%;
+					left: 50%;
+					width: 36px;
+					height: 36px;
+					margin-top: -18px;
+					margin-left: -18px;
+					border-radius: 50%;
+					border: 3px solid #cfe0ff;
+					border-top-color: var(--accent);
+					animation: spin 0.8s linear infinite;
+				}
+				@keyframes spin {
+					to { transform: rotate(360deg); }
+				}
 				.modal-desc {
 					margin: 14px 0 0;
 					font-size: 13px;
@@ -1303,13 +1331,8 @@ func ExportTopHTML(data []CloudflareIPData) {
             <div class="hero">
             </div>
 
-			<div class="tabs">
-				<button class="tab-btn active" type="button" data-target="current">本次结果</button>
-				<button class="tab-btn" type="button" data-target="history">最近历史结果</button>
-			</div>
-
-			<div class="view is-active" id="view-current">{{.CurrentSection}}</div>
-            <div class="view" id="view-history">{{.HistorySection}}</div>
+			{{.CurrentSection}}
+            {{.HistorySection}}
 
             <div class="footer">
                 <p class="footer-note">提示：请先复制对应的 Vmess 订阅链接，再到其他格式订阅转换工具中使用；本地历史数据会保存在 {{.HistoryFile}} 中。</p>
@@ -1325,6 +1348,7 @@ func ExportTopHTML(data []CloudflareIPData) {
 				<div class="modal-title" id="qr-title">订阅二维码</div>
 				<button class="modal-close" type="button" onclick="closeQr()" aria-label="关闭">×</button>
 			</div>
+			<div class="qr-loading" id="qr-loading" aria-hidden="true"></div>
 			<img class="modal-qr" id="qr-image" alt="订阅二维码" src="">
 			<p class="modal-desc" id="qr-text"></p>
 		</div>
@@ -1369,9 +1393,9 @@ func ExportTopHTML(data []CloudflareIPData) {
                 return;
             }
 
-            var originalHtml = button.innerHTML;
+			var originalHtml = button.innerHTML;
             copyText(link).then(function() {
-                button.innerHTML = '已复制';
+				button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5 1.41-1.41L9 14.17 18.59 4.59z"/></svg>';
                 button.classList.add('is-copied');
                 setTimeout(function() {
                     button.innerHTML = originalHtml;
@@ -1387,6 +1411,16 @@ func ExportTopHTML(data []CloudflareIPData) {
 				alert('请先在 result.yaml 中配置 vmess_template');
 				return;
 			}
+			qrLoading.classList.add('is-visible');
+			qrImage.style.display = 'none';
+			qrImage.onload = function() {
+				qrLoading.classList.remove('is-visible');
+				qrImage.style.display = 'block';
+			};
+			qrImage.onerror = function() {
+				qrLoading.classList.remove('is-visible');
+				alert('二维码加载失败，请稍后重试。');
+			};
 			qrImage.src = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=' + encodeURIComponent(link);
 			qrText.textContent = link;
 			qrModal.classList.add('is-open');
@@ -1396,7 +1430,9 @@ func ExportTopHTML(data []CloudflareIPData) {
 		function closeQr() {
 			qrModal.classList.remove('is-open');
 			qrModal.setAttribute('aria-hidden', 'true');
+			qrLoading.classList.remove('is-visible');
 			qrImage.src = '';
+			qrImage.style.display = 'block';
 			qrText.textContent = '';
 		}
 
@@ -1412,17 +1448,7 @@ func ExportTopHTML(data []CloudflareIPData) {
 			}
 		});
 
-        document.querySelectorAll('.tab-btn').forEach(function(button) {
-            button.addEventListener('click', function() {
-                var target = button.getAttribute('data-target');
-                document.querySelectorAll('.tab-btn').forEach(function(other) {
-                    other.classList.toggle('active', other === button);
-                });
-                document.querySelectorAll('.view').forEach(function(view) {
-                    view.classList.toggle('is-active', view.id === 'view-' + target);
-                });
-            });
-        });
+		// 标签页已移除：本次结果和最近历史结果顺序展示。
     </script>
 </body>
 </html>`))
