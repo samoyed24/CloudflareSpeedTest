@@ -153,7 +153,13 @@ jobs:
 
           echo "[deploy] checking Tailscale SSH reachability to ${TARGET_HOST_TRIMMED}"
 
-          tailscale ssh -o StrictHostKeyChecking=accept-new "${SSH_USER}@${TARGET_HOST_TRIMMED}" "\
+          mkdir -p ~/.ssh
+          {
+            echo "Host *.ts.net"
+            echo "  StrictHostKeyChecking accept-new"
+          } >> ~/.ssh/config
+
+          tailscale ssh "${SSH_USER}@${TARGET_HOST_TRIMMED}" "\
             set -eu; \
             mkdir -p '${WORKDIR}'; \
             cd '${WORKDIR}'; \
