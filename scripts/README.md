@@ -1,4 +1,4 @@
-# 编译脚本
+# 脚本说明
 
 ## build.sh
 
@@ -39,24 +39,125 @@
 - `-trimpath` - 移除源码路径信息
 - `-ldflags '-s -w'` - 移除符号表和调试信息，减小二进制大小
 
-### 部署到远程主机
+## deploy-html.sh
 
-编译完成后，可以直接部署：
+部署脚本，将生成的 `result.html` 复制到 Nginx 静态文件目录。
+
+### 使用方法
 
 ```bash
-# 1. 编译到 Linux ARM64
-./scripts/build.sh
+# 使用 config.yaml 中配置的 nginx_dir
+./scripts/deploy-html.sh
 
-# 2. 上传到远程主机
-scp cfst root@target-host:/opt/cfst/
+# 复制到指定目录（覆盖配置）
+./scripts/deploy-html.sh -t /var/www/html
 
-# 3. 在远程主机上运行
-ssh root@target-host '/opt/cfst/cfst'
+# 使用自定义配置文件
+./scripts/deploy-html.sh -c /etc/cfst/config.yaml -t /app/static
 ```
 
-### 支持的平台
+### 参数说明
+
+- `-c, --config FILE` - 配置文件路径 (默认: `instance/config.yaml`)
+- `-t, --target DIR` - Nginx 目标目录 (覆盖配置文件中的 `nginx_dir`)
+- `-h, --help` - 显示帮助信息
+
+### 配置方式
+
+在 `instance/config.yaml` 中配置 Nginx 目录：
+
+```yaml
+# Nginx 静态文件目录（可选）
+# 示例: /app/static, /var/www/html, /usr/share/nginx/html
+nginx_dir: "/var/www/html"
+```
+
+### 重要说明
+
+- **无需重启 Nginx** - 只是复制文件，Nginx 会自动读取更新
+- 文件系统更新立即生效
+- 访问 Nginx 即可看到最新的测速结果
+
+---
+
+## 完整工作流示例
+
+### 1. 首次配置
+
+```bash
+# 复制配置模板
+cp config.template.yaml instance/config.yaml
+
+# 编辑配置（按需修改）
+nano instance/config.yaml
+```
+
+### 2. 编译
+
+```bash
+# 编译到 Linux ARM64
+./scripts/build.sh
+
+# 或编译到其他平台
+./scripts/build.sh -a amd64
+./scripts/build.sh -o darwin -a arm64
+```
+
+### 3. 运行测速
+
+```bash
+# 直接运行（会输出到 data/ 和 dist/ 目录）
+./cfst
+
+# 或指定 IP 文件
+./cfst -f data/ip.txt
+```
+
+### 4. 部署到 Nginx
+
+```bash
+# 复制 result.html 到 Nginx
+./scripts/deploy-html.sh -t /var/www/html
+
+# 或使用配置文件配置
+# 编辑 instance/config.yaml，设置 nginx_dir
+# 然后运行
+./scripts/deploy-html.sh
+```
+
+---
+
+## 目录结构说明
+
+```
+CloudflareSpeedTest/
+├── scripts/                    # 脚本目录
+│   ├── build.sh               # 编译脚本
+│   ├── deploy-html.sh         # 部署脚本
+│   └── README.md              # 脚本说明
+├── data/                      # 数据目录（由应用生成）
+│   ├── ip.txt                # IP 列表
+│   └── result_history.json    # 历史记录（JSON 格式）
+├── dist/                      # 输出目录
+│   └── result.html           # 测速结果 HTML
+├── instance/
+│   └── config.yaml           # 用户配置（gitignore 忽略）
+├── config.template.yaml      # 配置模板
+├── cfst                       # 编译生成的可执行文件
+└── ...
+```
+
+---
+
+## 支持的平台
+
+### 编译支持
 
 - Linux: amd64, arm64, arm (armv7), 386
 - macOS: amd64, arm64
 - Windows: amd64, 386
-- 其他: 根据Go支持的目标平台可扩展
+
+### 部署支持
+
+- 任何支持 Nginx 的操作系统
+- 需要对目标目录有写权限

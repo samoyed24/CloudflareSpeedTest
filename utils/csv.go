@@ -190,6 +190,6 @@ func (s DownloadSpeedSet) Print() {
 		fmt.Printf(dataFormat, dateString[i][0], dateString[i][1], dateString[i][2], dateString[i][3], dateString[i][4], dateString[i][5], dateString[i][6])
 	}
 	if !noOutput() {
-		fmt.Printf("\n完整测速结果已写入 %v 文件，最近三天历史记录已同步更新为 %v，可直接用浏览器查看。\n", defaultHTMLOutput, defaultHistoryStore)
+		fmt.Printf("\n完整测速结果已写入 %v 文件，最近三天历史记录已同步更新为 %v，可直接用浏览器查看。\n", HTMLOutputPath, HistoryOutputPath)
 	}
 }
