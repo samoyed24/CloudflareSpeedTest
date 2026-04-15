@@ -15,5 +15,4 @@ services:
       - "8080:8080"
       - "8443:8443"
     volumes:
-      - ./data:/app
       - ./certs:/app/certs:ro
