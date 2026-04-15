@@ -200,7 +200,7 @@ jobs:
                 exit 1; \
               fi; \
             fi; \
-            if [ "${DOCKER_WITH}" = 'docker' ]; then \
+            if [ "\${DOCKER_WITH}" = 'docker' ]; then \
               printf '%s' '${ACR_PASSWORD}' | docker login '${ACR_REGISTRY}' -u '${ACR_USERNAME}' --password-stdin; \
               docker compose -f '${COMPOSE_FILE}' pull; \
               docker compose -f '${COMPOSE_FILE}' up -d; \
