@@ -11,6 +11,7 @@ import (
 
 	"github.com/XIU2/CloudflareSpeedTest/task"
 	"github.com/XIU2/CloudflareSpeedTest/utils"
+	"gopkg.in/yaml.v3"
 )
 
 var (
