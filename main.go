@@ -17,6 +17,34 @@ var (
 	version, versionNew string
 )
 
+type Config struct {
+	Environment  string `yaml:"environment"`
+	HistoryHours int    `yaml:"history_hours"`
+	VMessTemplate string `yaml:"vmess_template"`
+}
+
+func loadConfig(configFile string) *Config {
+	data, err := os.ReadFile(configFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "错误: 无法读取配置文件 %s: %v\n", configFile, err)
+		fmt.Fprintf(os.Stderr, "请先创建配置文件: cp config.template.yml %s\n", configFile)
+		os.Exit(1)
+	}
+
+	cfg := &Config{
+		Environment:   "",
+		HistoryHours:  72,
+		VMessTemplate: "",
+	}
+
+	if err := yaml.Unmarshal(data, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "错误: 配置文件解析失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	return cfg
+}
+
 func init() {
 	var printVersion bool
 	var help = `
@@ -110,6 +138,9 @@ https://github.com/XIU2/CloudflareSpeedTest
 	flag.BoolVar(&printVersion, "v", false, "打印程序版本")
 	flag.Usage = func() { fmt.Print(help) }
 	flag.Parse()
+
+	// 加载实例配置文件
+	_ = loadConfig("instance/config.yml")
 
 	if task.MinSpeed > 0 && time.Duration(maxDelay)*time.Millisecond == utils.InputMaxDelay {
 		utils.Yellow.Println("[提示] 在使用 [-sl] 参数时，建议搭配 [-tl] 参数，以避免因凑不够 [-dn] 数量而一直测速...")

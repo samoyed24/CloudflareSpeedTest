@@ -4,3 +4,4 @@ Releases
 *.csv
 result.yaml
 result.html
+instance/

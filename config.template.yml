@@ -1,0 +1,31 @@
+# CloudflareSpeedTest 实例配置模板
+# 使用方法：复制到 instance/config.yml 中配置
+
+# 测速环境，会显示在 HTML 结果页顶部
+environment: "家宽 / 中国移动 / 昆明"
+
+# 历史记录保留时长，单位为小时；超出这个时间的记录会在每次测速后自动删除
+history_hours: 72
+
+# VMess 订阅模板（YAML literal block）
+# 这里的 {{.IP}} 会在渲染每一行时替换成当前 IP
+# 也可以使用 {{.Rank}}、{{.DelayText}}、{{.SpeedText}}、{{.Colo}} 等字段
+vmess_template: |
+  {
+    "v": "2",
+    "ps": "...",
+    "add": "{{.IP}}",
+    "port": "443",
+    "id": "...",
+    "aid": "0",
+    "scy": "auto",
+    "net": "ws",
+    "type": "none",
+    "host": "...",
+    "path": "...",
+    "tls": "tls",
+    "sni": "...",
+    "alpn": "...",
+    "fp": "...",
+    "insecure": "0"
+  }
