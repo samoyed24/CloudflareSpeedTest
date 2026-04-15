@@ -175,8 +175,40 @@ jobs:
             mkdir -p '${WORKDIR}'; \
             cd '${WORKDIR}'; \
             echo '${COMPOSE_B64}' | base64 -d > '${COMPOSE_FILE}'; \
-            printf '%s' '${ACR_PASSWORD}' | docker login '${ACR_REGISTRY}' -u '${ACR_USERNAME}' --password-stdin; \
-            docker compose -f '${COMPOSE_FILE}' pull; \
-            docker compose -f '${COMPOSE_FILE}' up -d; \
-            docker image prune -f \
+            if docker info >/dev/null 2>&1; then \
+              DOCKER_WITH='docker'; \
+            elif sudo -n docker info >/dev/null 2>&1; then \
+              DOCKER_WITH='sudo'; \
+            else \
+              echo '[deploy] Docker daemon not ready, trying to start service...' >&2; \
+              if command -v systemctl >/dev/null 2>&1; then \
+                systemctl start docker >/dev/null 2>&1 || sudo -n systemctl start docker >/dev/null 2>&1 || true; \
+              elif command -v service >/dev/null 2>&1; then \
+                service docker start >/dev/null 2>&1 || sudo -n service docker start >/dev/null 2>&1 || true; \
+              fi; \
+              if docker info >/dev/null 2>&1; then \
+                DOCKER_WITH='docker'; \
+              elif sudo -n docker info >/dev/null 2>&1; then \
+                DOCKER_WITH='sudo'; \
+              else \
+                echo '[deploy] cannot access Docker daemon after start attempt' >&2; \
+                command -v docker >&2 || true; \
+                docker --version >&2 || true; \
+                systemctl status docker --no-pager >&2 || true; \
+                id >&2 || true; \
+                groups >&2 || true; \
+                exit 1; \
+              fi; \
+            fi; \
+            if [ "${DOCKER_WITH}" = 'docker' ]; then \
+              printf '%s' '${ACR_PASSWORD}' | docker login '${ACR_REGISTRY}' -u '${ACR_USERNAME}' --password-stdin; \
+              docker compose -f '${COMPOSE_FILE}' pull; \
+              docker compose -f '${COMPOSE_FILE}' up -d; \
+              docker image prune -f; \
+            else \
+              printf '%s' '${ACR_PASSWORD}' | sudo -n docker login '${ACR_REGISTRY}' -u '${ACR_USERNAME}' --password-stdin; \
+              sudo -n docker compose -f '${COMPOSE_FILE}' pull; \
+              sudo -n docker compose -f '${COMPOSE_FILE}' up -d; \
+              sudo -n docker image prune -f; \
+            fi \
           "

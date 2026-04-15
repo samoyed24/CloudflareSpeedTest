@@ -79,6 +79,28 @@ export NGINX_SERVER_NAME="${NGINX_SERVER_NAME:-_}"
 export NGINX_SSL_CERT_PATH="${NGINX_SSL_CERT_PATH:-/app/certs/fullchain.pem}"
 export NGINX_SSL_KEY_PATH="${NGINX_SSL_KEY_PATH:-/app/certs/privkey.pem}"
 
+mkdir -p /app
+
+# Avoid 403 on first boot: ensure /app can be read by nginx and provide a placeholder page.
+chmod 755 /app 2>/dev/null || true
+if [ ! -f /app/result.html ]; then
+  cat > /app/result.html <<'EOF'
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CFST</title>
+</head>
+<body>
+  <h1>CFST is starting...</h1>
+  <p>Please refresh in a moment. result.html will be generated after the first test run.</p>
+</body>
+</html>
+EOF
+  chmod 644 /app/result.html 2>/dev/null || true
+fi
+
 generate_result_yaml_from_env
 write_tls_files_from_env
 
