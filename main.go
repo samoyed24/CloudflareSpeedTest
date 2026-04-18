@@ -19,10 +19,12 @@ var (
 )
 
 type Config struct {
-	Environment   string `yaml:"environment"`
-	HistoryHours  int    `yaml:"history_hours"`
-	VMessTemplate string `yaml:"vmess_template"`
-	NginxDir      string `yaml:"nginx_dir"`
+	Environment         string `yaml:"environment"`
+	HistoryHours        int    `yaml:"history_hours"`
+	HistoryDisplayCount int    `yaml:"history_display_count"`
+	TestCount           int    `yaml:"test_count"`
+	VMessTemplate       string `yaml:"vmess_template"`
+	NginxDir            string `yaml:"nginx_dir"`
 }
 
 func loadConfig(configFile string) *Config {
@@ -34,10 +36,12 @@ func loadConfig(configFile string) *Config {
 	}
 
 	cfg := &Config{
-		Environment:   "",
-		HistoryHours:  72,
-		VMessTemplate: "",
-		NginxDir:      "",
+		Environment:         "",
+		HistoryHours:        72,
+		HistoryDisplayCount: 10,
+		TestCount:           10,
+		VMessTemplate:       "",
+		NginxDir:            "",
 	}
 
 	if err := yaml.Unmarshal(data, cfg); err != nil {
@@ -46,6 +50,16 @@ func loadConfig(configFile string) *Config {
 	}
 
 	return cfg
+}
+
+func isFlagProvided(name string) bool {
+	provided := false
+	flag.CommandLine.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			provided = true
+		}
+	})
+	return provided
 }
 
 func init() {
@@ -144,20 +158,24 @@ https://github.com/XIU2/CloudflareSpeedTest
 
 	// 加载配置文件
 	cfg := loadConfig("instance/config.yaml")
-	
+
 	// 确保输出目录存在（硬编码为 data 和 dist）
 	const dataDir = "data"
 	const distDir = "dist"
 	os.MkdirAll(dataDir, 0755)
 	os.MkdirAll(distDir, 0755)
-	
+
 	// 设置输出路径给utils包
 	utils.HTMLOutputPath = distDir + "/result.html"
 	utils.HistoryOutputPath = dataDir + "/result_history.json"
 	utils.GlobalHTMLConfig = utils.HTMLConfig{
-		Environment:   cfg.Environment,
-		HistoryHours:  cfg.HistoryHours,
-		VMessTemplate: cfg.VMessTemplate,
+		Environment:         cfg.Environment,
+		HistoryHours:        cfg.HistoryHours,
+		HistoryDisplayCount: cfg.HistoryDisplayCount,
+		VMessTemplate:       cfg.VMessTemplate,
+	}
+	if !isFlagProvided("dn") && cfg.TestCount > 0 {
+		task.TestCount = cfg.TestCount
 	}
 	// 应用数据目录路径（如果命令行没有明确指定，使用 data 目录）
 	if flag.Lookup("f").Value.String() == "ip.txt" {

@@ -7,6 +7,14 @@ environment: "家宽 / 中国移动 / 昆明"
 # 历史记录保留时长，单位为小时；超出这个时间的记录会在每次测速后自动删除
 history_hours: 72
 
+# 最近历史结果展示数量（HTML 页面中“最近历史结果”最多展示多少条）
+# 超过 10 条时自动分页，每页 10 条
+history_display_count: 30
+
+# 每次测速的 IP 数量（对应命令行 -dn）
+# 命令行 -dn 优先级高于该配置
+test_count: 10
+
 # Nginx 静态文件目录（可选，用于部署 result.html）
 # 如果配置了，脚本可以自动复制 result.html 到此目录
 # 示例: /app/static, /var/www/html, /usr/share/nginx/html

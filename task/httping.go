@@ -130,6 +130,10 @@ func MapColoMap() *sync.Map {
 	colos := strings.Split(strings.ToUpper(HttpingCFColo), ",")
 	colomap := &sync.Map{}
 	for _, colo := range colos {
+		colo = strings.TrimSpace(colo)
+		if colo == "" {
+			continue
+		}
 		colomap.Store(colo, colo)
 	}
 	return colomap
