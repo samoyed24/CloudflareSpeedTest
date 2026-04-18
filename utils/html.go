@@ -20,7 +20,8 @@ const (
 	DefaultHTMLConfig       = "result.yaml"
 	DefaultHistoryFileName  = "result_history.json"
 	defaultHistoryHours     = 72
-	defaultTopLimit         = 10
+	defaultHistoryPageSize  = 10
+	defaultHistoryShowCount = 10
 )
 
 // 可配置的输出路径（在main.go中设置）
@@ -31,16 +32,18 @@ var (
 )
 
 type htmlConfig struct {
-	Environment   string `yaml:"environment"`
-	HistoryHours  int    `yaml:"history_hours"`
-	VMessTemplate string `yaml:"vmess_template"`
+	Environment         string `yaml:"environment"`
+	HistoryHours        int    `yaml:"history_hours"`
+	HistoryDisplayCount int    `yaml:"history_display_count"`
+	VMessTemplate       string `yaml:"vmess_template"`
 }
 
 // HTMLConfig 是对外导出的配置类型
 type HTMLConfig struct {
-	Environment   string
-	HistoryHours  int
-	VMessTemplate string
+	Environment         string
+	HistoryHours        int
+	HistoryDisplayCount int
+	VMessTemplate       string
 }
 
 type htmlPageData struct {
@@ -136,6 +139,13 @@ func historyWindowFromHours(hours int) time.Duration {
 	return time.Duration(hours) * time.Hour
 }
 
+func historyDisplayCount(count int) int {
+	if count <= 0 {
+		return defaultHistoryShowCount
+	}
+	return count
+}
+
 func parseHTMLConfig(raw string) htmlConfig {
 	var cfg htmlConfig
 	lines := strings.Split(raw, "\n")
@@ -181,6 +191,10 @@ func parseHTMLConfig(raw string) htmlConfig {
 		case "history_hours":
 			if parsed, err := strconv.Atoi(parseHTMLScalar(value)); err == nil {
 				cfg.HistoryHours = parsed
+			}
+		case "history_display_count":
+			if parsed, err := strconv.Atoi(parseHTMLScalar(value)); err == nil {
+				cfg.HistoryDisplayCount = parsed
 			}
 		case "vmess_template":
 			if value == "|" || value == "|-" || value == "|+" || value == "" {
@@ -412,9 +426,6 @@ func mergeHistoryStore(currentRecords []historyRecord, historyWindow time.Durati
 
 	records := mapToRecords(recordMap)
 	sortRecordsBySpeed(records)
-	if len(records) > defaultTopLimit {
-		records = records[:defaultTopLimit]
-	}
 	if err := saveHistoryStore(records); err != nil {
 		return records, err
 	}
@@ -522,6 +533,9 @@ func renderSectionHTML(data sectionData) htmpl.HTML {
 	builder.WriteString("</tr></thead><tbody>")
 	builder.WriteString(string(data.RowsHTML))
 	builder.WriteString("</tbody></table></div>")
+	if data.ID == "history" {
+		builder.WriteString("<div class=\"history-pagination\" id=\"history-pagination\"></div>")
+	}
 	builder.WriteString("</section>")
 	return htmpl.HTML(builder.String())
 }
@@ -530,9 +544,10 @@ func renderSectionHTML(data sectionData) htmpl.HTML {
 func ExportTopHTML(data []CloudflareIPData) {
 	// 使用从main.go加载的全局配置
 	cfg := htmlConfig{
-		Environment:   GlobalHTMLConfig.Environment,
-		HistoryHours:  GlobalHTMLConfig.HistoryHours,
-		VMessTemplate: GlobalHTMLConfig.VMessTemplate,
+		Environment:         GlobalHTMLConfig.Environment,
+		HistoryHours:        GlobalHTMLConfig.HistoryHours,
+		HistoryDisplayCount: GlobalHTMLConfig.HistoryDisplayCount,
+		VMessTemplate:       GlobalHTMLConfig.VMessTemplate,
 	}
 	vmessTpl := compileVMessTemplate(cfg.VMessTemplate)
 
@@ -764,6 +779,30 @@ func ExportTopHTML(data []CloudflareIPData) {
 			color: var(--text-soft);
 			padding: 24px 14px;
 		}
+		.history-pagination {
+			display: flex;
+			gap: 8px;
+			flex-wrap: wrap;
+			padding: 8px 24px 18px;
+		}
+		.page-btn {
+			appearance: none;
+			border: 1px solid var(--line);
+			background: #fff;
+			color: var(--text);
+			border-radius: 10px;
+			min-width: 38px;
+			height: 34px;
+			padding: 0 10px;
+			font-size: 13px;
+			font-weight: 700;
+			cursor: pointer;
+		}
+		.page-btn.active {
+			background: var(--accent);
+			color: #fff;
+			border-color: var(--accent);
+		}
 		@media (max-width: 900px) {
 			.meta { grid-template-columns: 1fr; }
 			.action-cell { min-width: 106px; }
@@ -844,7 +883,7 @@ func ExportTopHTML(data []CloudflareIPData) {
 			<div class="view" id="view-history">{{.HistorySection}}</div>
 
 			<div class="footer">
-				<p class="footer-note">提示：请先复制对应的 Vmess 订阅链接，再到其他格式订阅转换工具中使用；本地历史数据会保存在 {{.HistoryFile}} 中。</p>
+				<p class="footer-note">提示：请先复制对应的 Vmess 订阅链接，再到其他格式订阅转换工具中使用。</p>
 				<div class="footer-actions">
 					<a class="sub-btn" href="https://subconverters.com/" target="_blank" rel="noreferrer">获取其他格式订阅</a>
 				</div>
@@ -968,19 +1007,20 @@ func ExportTopHTML(data []CloudflareIPData) {
 	}
 	historyWindow := historyWindowFromHours(cfg.HistoryHours)
 	historyHours := int(historyWindow / time.Hour)
+	historyShowCount := historyDisplayCount(cfg.HistoryDisplayCount)
 
 	testedAt := time.Now()
 	allCurrentRecords := topCurrentRecords(data, testedAt, pageEnvironment, len(data))
 	currentRecords := allCurrentRecords
-	if len(currentRecords) > 10 {
-		currentRecords = currentRecords[:10]
+	if len(currentRecords) > defaultHistoryPageSize {
+		currentRecords = currentRecords[:defaultHistoryPageSize]
 	}
 	historyRecords, err := mergeHistoryStore(allCurrentRecords, historyWindow, testedAt)
 	if err != nil {
 		log.Printf("[警告] 更新本地历史记录失败：%v", err)
 		historyRecords = allCurrentRecords
 	}
-	historyRecords = topHistoryRecords(historyRecords, 10, testedAt, historyWindow)
+	historyRecords = topHistoryRecords(historyRecords, historyShowCount, testedAt, historyWindow)
 
 	currentSection := renderSectionHTML(sectionData{
 		ID:       "current",
@@ -998,9 +1038,9 @@ func ExportTopHTML(data []CloudflareIPData) {
 	historySection := renderSectionHTML(sectionData{
 		ID:       "history",
 		Title:    "最近历史结果",
-		Subtitle: fmt.Sprintf("从本地历史数据中取出最近 %d 小时的记录，按速度从快到慢排序前 10 个。", historyHours),
+		Subtitle: fmt.Sprintf("从最近 %d 小时的历史数据中按速度从快到慢展示前 %d 个，超过 %d 个按页展示。", historyHours, len(historyRecords), defaultHistoryPageSize),
 		MetaItems: []metaItem{
-			{Label: "数据来源", Value: HistoryOutputPath},
+			{Label: "测速环境", Value: pageEnvironment},
 			{Label: "时间窗口", Value: fmt.Sprintf("最近 %d 小时", historyHours)},
 			{Label: "展示数量", Value: fmt.Sprintf("%d 个 IP", len(historyRecords))},
 		},
@@ -1319,6 +1359,30 @@ func ExportTopHTML(data []CloudflareIPData) {
             color: var(--text-soft);
             padding: 24px 14px;
         }
+		.history-pagination {
+			display: flex;
+			gap: 8px;
+			flex-wrap: wrap;
+			padding: 8px 24px 18px;
+		}
+		.page-btn {
+			appearance: none;
+			border: 1px solid var(--line);
+			background: #fff;
+			color: var(--text);
+			border-radius: 10px;
+			min-width: 38px;
+			height: 34px;
+			padding: 0 10px;
+			font-size: 13px;
+			font-weight: 700;
+			cursor: pointer;
+		}
+		.page-btn.active {
+			background: var(--accent);
+			color: #fff;
+			border-color: var(--accent);
+		}
         @media (max-width: 900px) {
             .meta { grid-template-columns: 1fr; }
 			.action-cell { min-width: 72px; }
@@ -1334,8 +1398,8 @@ func ExportTopHTML(data []CloudflareIPData) {
 			{{.CurrentSection}}
             {{.HistorySection}}
 
-            <div class="footer">
-                <p class="footer-note">提示：请先复制对应的 Vmess 订阅链接，再到其他格式订阅转换工具中使用；本地历史数据会保存在 {{.HistoryFile}} 中。</p>
+			<div class="footer">
+				<p class="footer-note">提示：请先复制对应的 Vmess 订阅链接，再到其他格式订阅转换工具中使用。</p>
                 <div class="footer-actions">
                     <a class="sub-btn" href="https://subconverters.com/" target="_blank" rel="noreferrer">获取其他格式订阅</a>
                 </div>
@@ -1455,7 +1519,54 @@ func ExportTopHTML(data []CloudflareIPData) {
 			}
 		});
 
-		// 标签页已移除：本次结果和最近历史结果顺序展示。
+		function initHistoryPagination() {
+			var pageSize = 10;
+			var section = document.getElementById('view-history');
+			if (!section) {
+				return;
+			}
+			var rows = Array.prototype.slice.call(section.querySelectorAll('tbody tr'));
+			if (rows.length === 0 || rows[0].querySelector('.empty-row')) {
+				return;
+			}
+			if (rows.length <= pageSize) {
+				return;
+			}
+
+			var pager = document.getElementById('history-pagination');
+			if (!pager) {
+				return;
+			}
+
+			var totalPages = Math.ceil(rows.length / pageSize);
+
+			function renderPage(page) {
+				rows.forEach(function(row, idx) {
+					var start = (page - 1) * pageSize;
+					var end = start + pageSize;
+					row.style.display = idx >= start && idx < end ? '' : 'none';
+				});
+				Array.prototype.forEach.call(pager.querySelectorAll('.page-btn'), function(btn) {
+					btn.classList.toggle('active', Number(btn.getAttribute('data-page')) === page);
+				});
+			}
+
+			for (var p = 1; p <= totalPages; p++) {
+				var btn = document.createElement('button');
+				btn.type = 'button';
+				btn.className = 'page-btn';
+				btn.textContent = String(p);
+				btn.setAttribute('data-page', String(p));
+				btn.addEventListener('click', function(event) {
+					renderPage(Number(event.currentTarget.getAttribute('data-page')));
+				});
+				pager.appendChild(btn);
+			}
+
+			renderPage(1);
+		}
+
+		initHistoryPagination();
     </script>
 </body>
 </html>`))
